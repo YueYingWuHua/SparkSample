@@ -5,12 +5,16 @@ import org.apache.spark.SparkConf
 import java.util.Properties
 import org.apache.spark.sql.types._
 import scala.collection.mutable.ArrayBuffer
+import java.util.Date
+import java.text.SimpleDateFormat
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.Encoders
 
 
 object SSample {
   
-  def init(args: Array[String]): (String, String, String, String, String) = {
-    (args(0), args(1), args(2), args(3), args(4))
+  def init(args: Array[String]): (String, String, String, String, Integer, String) = {
+    (args(0), args(1), args(2), args(3), args(4).toInt, args(5))
   }
   
   def matchType(s: String): DataType = s.toLowerCase match {
@@ -24,7 +28,16 @@ object SSample {
     case _ => StringType
   }
   
-  def makeStruct(columns: String) = {
+  def mkProperties(user: String, pw: String) = {
+    val prop = new Properties()
+    prop.setProperty("user", "root")
+    prop.setProperty("password", "Dx72000000!")
+    prop.setProperty("useUnicode", "true")
+    prop.setProperty("characterEncoding", "utf-8")
+    prop
+  }
+  
+  def mkStruct(columns: String) = {
     var sf : List[StructField] = List()
     val column = columns.split(",|\\s+")
     for (i <- 0 until column.length; if (i % 2 == 0))
@@ -32,7 +45,7 @@ object SSample {
     StructType(sf)
   }
   
-  //5个参数，数据地址，表名，数据类型，抽样列, 全部列名和列类型
+  //5个参数，数据地址，表名，数据类型，抽样列, fraction,全部列名和列类型
   def main(args: Array[String]): Unit = {
     //D:/testcsv.txt TCSV cSv lie1 lie1,lie2,lie3,lie4,lie5
     //jdbc:mysql://192.168.12.222:3306/test locus mysql l123qasd 123
@@ -43,33 +56,40 @@ object SSample {
       if (i < 18) col(i+1) = "integer" else col(i+1) = "string"
     }
     System.setProperty("hadoop.home.dir", "D:/hadoop-common")
-    val (url, tableName, sourceType, sampleColumns, columns) = init(args)
+    //先这么测试输入参数
+    require(args.length == 6)
+    val (url, tableName, sourceType, sampleColumns, amount, columns) = init(args)
     println(columns)
-    val spark = SparkSession.builder.master("spark://192.168.12.147:7077").config(new SparkConf()
+    //创建sparkSessiong
+    val spark = SparkSession.builder.master("local").config(new SparkConf()
       //.setMaster("spark://192.168.12.146:7077")
       .setAppName("sample")
       //.set("spark.local.dir", "D:/sparktmp/")
       .setJars(Array("file:///D:/mysql-connector-java-5.1.41/mysql-connector-java-5.1.41-bin.jar"))
       //.setJars(Array("/home/cloud/mysql-connector-java-5.1.41-bin.jar"))
       ).getOrCreate
-    val reader = spark.read    
+    val reader = spark.read
+    //从源地址读取数据
     val df = sourceType.toLowerCase match {
-      case "mysql" => {
-        val prop = new Properties()
-        prop.setProperty("user", "root")
-        prop.setProperty("password", "Dx72000000!")
-        reader.jdbc(url, tableName, prop)        
-      }
+      case "mysql" => reader.jdbc(url, tableName, mkProperties("root", "Dx72000000!"))        
       case "parquet" => reader.parquet(url)
       case "orc" => reader.orc(url)
-      case "csv" => {
-       val struct = makeStruct(col.mkString(","))
-       reader.schema(struct).csv(url)
-      }
+      case "csv" => reader.schema(mkStruct(col.mkString(","))).csv(url)
     }
-    //val st = df.schema.iterator
-    df.columns.foreach { println }
-    df.write.parquet("D:/WorkSpaceBDP2edition/jdbcOut")
+    //解析抽样列
+    val scs = sampleColumns.split(",|\\s+")
+    val fraction = amount.toDouble*2/df.count
+    println(fraction)
+    //将抽样列数组转化为column*，并取出这些列，抽样2倍数据量并取出所要求的个数数据
+    val arr = df.select(scs.map(df(_)):_*).sample(false, fraction).take(amount)
+    //将取出来的数据转化回DataFrame，用来写parquet和jdbc
+    val rowRDD = spark.sparkContext.makeRDD(arr)
+    require(arr.length >= 1)
+    //输出模块，jdbc修改为用户密码指定的
+    val writer = spark.createDataFrame(rowRDD, arr(0).schema).write
+    val sdf = new SimpleDateFormat("yyyyMMddHHmmss")
+    writer.jdbc(url, "Sample"+ tableName + sdf.format(new Date(System.currentTimeMillis())), mkProperties("root", "Dx72000000!"))
+    writer.parquet("D:/jdbcOut")
     spark.stop
   }
 }
