@@ -84,7 +84,7 @@ object SSample {
     val arr = df.select(scs.map(df(_)):_*).sample(false, fraction).take(amount)
     //将取出来的数据转化回DataFrame，用来写parquet和jdbc
     val rowRDD = spark.sparkContext.makeRDD(arr)
-    require(arr.length >= 1)
+    assert(arr.length >= 1)
     //输出模块，jdbc修改为用户密码指定的
     val writer = spark.createDataFrame(rowRDD, arr(0).schema).write
     val sdf = new SimpleDateFormat("yyyyMMddHHmmss")
