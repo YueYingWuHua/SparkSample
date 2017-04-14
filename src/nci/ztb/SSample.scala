@@ -18,7 +18,7 @@ import java.sql.Statement
  * @author cloud
  * sampling with spark.
  */
-object SSample {
+object SSample extends Conf{
   val projectName = "sampleOut"
   var isDBexists = false
   var isDBconnected = true
@@ -54,14 +54,13 @@ object SSample {
    */
   def mkProperties(user: String, pw: String) = {
     val prop = new Properties()
-    prop.setProperty("user", "root")
-    prop.setProperty("password", "Dx72000000!")
+    prop.setProperty("user", user)
+    prop.setProperty("password", pw)
     prop.setProperty("useUnicode", "true")
     prop.setProperty("characterEncoding", "utf-8")
     prop
   }
-  
-  
+    
   /**
    * 创建structType.
    * @param columns
@@ -80,7 +79,7 @@ object SSample {
  	 */
   def testConnection = {
     Class.forName("com.mysql.jdbc.Driver")
-    val url = "jdbc:mysql://192.168.12.222:3306/?user=root&password=Dx72000000!"
+    val url = s"jdbc:mysql://192.168.12.222:3306/?user=${config.getString("sample.jdbc.user")}&password=${config.getString("sample.jdbc.pw")}"
     var con: Connection = null
     var state: Statement = null
     try{
@@ -135,7 +134,7 @@ object SSample {
     val reader = spark.read
     //从源地址读取数据
     val df = sourceType.toLowerCase match {
-      case "mysql" => reader.jdbc(url, tableName, mkProperties("root", "Dx72000000!"))        
+      case "mysql" => reader.jdbc(url, tableName, mkProperties(config.getString("sample.source.user"), config.getString("sample.source.pw")))        
       case "parquet" => reader.parquet(url)
       case "orc" => reader.orc(url)
       case "csv" => reader.schema(mkStruct(col.mkString(","))).csv(url)
@@ -154,7 +153,11 @@ object SSample {
     val writer = spark.createDataFrame(rowRDD, arr(0).schema).write
     val sdf = new SimpleDateFormat("yyyyMMddHHmmss")
     //写抽样数据数据库
-    writer.jdbc(s"jdbc:mysql://192.168.12.222:3306/$projectName", "Sample"+ tableName + sdf.format(new Date(System.currentTimeMillis())), mkProperties("root", "Dx72000000!"))
+    writer.jdbc(
+        s"jdbc:mysql://192.168.12.222:3306/$projectName",
+        "Sample"+ tableName + sdf.format(new Date(System.currentTimeMillis())),
+        mkProperties(config.getString("sample.jdbc.user"), config.getString("sample.jdbc.pw"))
+        )
     //写抽样数据库
     
     
