@@ -9,14 +9,30 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.Encoders
+import java.sql.DriverManager
+import java.sql.Connection
+import java.sql.Statement
 
 
+/**
+ * @author cloud
+ * sampling with spark.
+ */
 object SSample {
-  
+  val projectName = "sampleOut"
+  var isDBexists = false
+  var isDBconnected = true
   def init(args: Array[String]): (String, String, String, String, Integer, String) = {
     (args(0), args(1), args(2), args(3), args(4).toInt, args(5))
   }
   
+  
+  /**
+   * 将输入的数据格式（非格式化数据）和spark中的DataType对应起来.
+   * <b>
+ 	 * @param s 输入格式
+   * @return DataType  
+   */
   def matchType(s: String): DataType = s.toLowerCase match {
     case "string" | "pic" => StringType
     case "int" | "integer" => IntegerType
@@ -28,6 +44,14 @@ object SSample {
     case _ => StringType
   }
   
+  
+  /**
+   * 添加数据库配置.
+   * <b>
+	 * @param user: userName
+   * @param pw: password
+   * @return
+   */
   def mkProperties(user: String, pw: String) = {
     val prop = new Properties()
     prop.setProperty("user", "root")
@@ -37,6 +61,12 @@ object SSample {
     prop
   }
   
+  
+  /**
+   * 创建structType.
+   * @param columns
+   * @return
+   */
   def mkStruct(columns: String) = {
     var sf : List[StructField] = List()
     val column = columns.split(",|\\s+")
@@ -45,6 +75,43 @@ object SSample {
     StructType(sf)
   }
   
+  /**
+ 	 * 测试数据库连通性并创建database.
+ 	 */
+  def testConnection = {
+    Class.forName("com.mysql.jdbc.Driver")
+    val url = "jdbc:mysql://192.168.12.222:3306/?user=root&password=Dx72000000!"
+    var con: Connection = null
+    var state: Statement = null
+    try{
+      con = DriverManager.getConnection(url)
+      state = con.createStatement
+      state.executeUpdate(s"create database $projectName")
+      isDBconnected = true
+      isDBexists = true
+    } catch {
+      case e1: com.mysql.jdbc.exceptions.jdbc4.CommunicationsException =>
+        isDBconnected = false
+        println(e1)
+      case e2: java.sql.SQLException =>
+        isDBconnected = true
+        isDBexists = true
+        println(e2)        
+      case e3: Throwable =>
+        isDBconnected = false
+        isDBexists = false
+        println(e3)
+    } finally {
+      state.close
+      con.close
+    }
+  }
+  
+  
+  /**
+   * 抽样.
+ 	 * @param args
+ 	 */
   def doSample(args: Array[String]) = {    
     //col测试用，正式版删除
     var col = new Array[String](70)
@@ -87,7 +154,7 @@ object SSample {
     val writer = spark.createDataFrame(rowRDD, arr(0).schema).write
     val sdf = new SimpleDateFormat("yyyyMMddHHmmss")
     //写抽样数据数据库
-    writer.jdbc(url, "Sample"+ tableName + sdf.format(new Date(System.currentTimeMillis())), mkProperties("root", "Dx72000000!"))
+    writer.jdbc(s"jdbc:mysql://192.168.12.222:3306/$projectName", "Sample"+ tableName + sdf.format(new Date(System.currentTimeMillis())), mkProperties("root", "Dx72000000!"))
     //写抽样数据库
     
     
@@ -100,6 +167,8 @@ object SSample {
     //D:/testcsv.txt TCSV cSv lie1 lie1,lie2,lie3,lie4,lie5
     //jdbc:mysql://192.168.12.222:3306/test locus mysql l123qasd 123
     //写数据库抽样开始
+    testConnection
+    if (!isDBconnected) println("Cant connect to database") 
     def writeStart = {
       
     }
