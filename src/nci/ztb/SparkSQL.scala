@@ -9,7 +9,7 @@ object SparkSQL {
   
   var tables = new ArrayBuffer[String]
   var path = "D:/jdbcOut"
-  val sqlStr = "select * from ${locus} a where a.name = \"郑恩柏\""
+  val sqlStr = "select * from ${locus} a, ${locus2} b where a.name = b.name"
   
   def analyzeSQL(str: String) = {    
     val par = "\\$\\{[^\\$\\{\\}]+\\}|\\$[^ \t\\$\\{\\}]+" 
@@ -31,6 +31,15 @@ object SparkSQL {
     (args(0), args(1))
   }
   
+  
+  /**
+	 * @param x  use table name x to find the path of table
+	 * @return path
+ 	 */
+  def getPath(x: String) = {
+    "D:/" + x
+  }
+  
   def dosql() = {
     System.setProperty("hadoop.home.dir", "D:/hadoop-common")
     val spark = SparkSession.builder.master("local").config(new SparkConf()
@@ -40,10 +49,13 @@ object SparkSQL {
       .setJars(Array("file:///D:/mysql-connector-java-5.1.41/mysql-connector-java-5.1.41-bin.jar"))
       //.setJars(Array("/home/cloud/mysql-connector-java-5.1.41-bin.jar"))
       ).getOrCreate
-    val df = spark.read.parquet(path)
+    val reader = spark.read
     val sql = analyzeSQL(sqlStr)
     println(sql)
-    df.createOrReplaceTempView(tables(0))
+    tables.foreach(x =>{
+      val df = reader.parquet(getPath(x))
+      df.createOrReplaceTempView(x)
+    })
     val sqldf = spark.sql(sql)
     sqldf.show()
     //spark.read.parquet(input).createOrReplaceTempView("")

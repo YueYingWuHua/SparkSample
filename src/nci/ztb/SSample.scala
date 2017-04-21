@@ -161,7 +161,7 @@ object SSample extends Conf{
     //写抽样数据库
     
     
-    writer.parquet("D:/jdbcOut")
+    writer.parquet("D:/locus2")
     spark.stop
   }
   
