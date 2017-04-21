@@ -57,6 +57,7 @@ object SparkSQL {
       df.createOrReplaceTempView(x)
     })
     val sqldf = spark.sql(sql)
+    println("the number of result = " + sqldf.count)
     sqldf.show()
     //spark.read.parquet(input).createOrReplaceTempView("")
   }
