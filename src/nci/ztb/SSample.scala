@@ -161,14 +161,14 @@ object SSample extends Conf{
     //写抽样数据库
     
     
-    //writer.parquet("D:/jdbcOut")
+    writer.parquet("D:/jdbcOut")
     spark.stop
   }
   
   //5个参数，数据地址，表名，数据类型，抽样列, fraction,全部列名和列类型
   def main(args: Array[String]): Unit = {
     //D:/testcsv.txt TCSV cSv lie1 lie1,lie2,lie3,lie4,lie5
-    //jdbc:mysql://192.168.12.222:3306/test locus mysql l123qasd 123
+    //jdbc:mysql://192.168.12.222:3306/test locus mysql name,locus 200 123asd
     //写数据库抽样开始
     testConnection
     if (!isDBconnected) println("Cant connect to database") 
@@ -179,6 +179,7 @@ object SSample extends Conf{
     
     try{
       doSample(args)
+      println("done")
     }catch{
       case e: Throwable => e.printStackTrace 
     }finally{
