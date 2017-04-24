@@ -28,22 +28,25 @@ class FakeWorker(
     val securityMgr: SecurityManager)
     extends ThreadSafeRpcEndpoint {
   
-  private val host = rpcEnv.address.host
-  private val port = rpcEnv.address.port
+  val host = rpcEnv.address.host
+  val port = rpcEnv.address.port
+  var count = masterRpcAddresses.length
   
-  private def connectWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
+  def connectWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
     masterEndpoint.ask[MasterStateResponse](RequestMasterState)
       .onComplete {
         // This is a very fast action so we can use "ThreadUtils.sameThread"
         case Success(msg) =>
-          msg.completedDrivers.foreach { x => println(x.id) }
+          msg.workers.foreach { x => println(x.coresFree) }
+          count = count - 1
+          if (count == 0) rpcEnv.shutdown
         case Failure(e) =>
           println(s"Cannot register with master: ${masterEndpoint.address}", e)
           System.exit(1)
       }(ThreadUtils.sameThread)
   }
   
-  private def getMasterStatus = {
+  def getMasterStatus = {
      masterRpcAddresses.map { masterAddress =>
       new Runnable {
         override def run(): Unit = {
@@ -51,20 +54,22 @@ class FakeWorker(
             println("Connecting to master " + masterAddress + "...")
             val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
             connectWithMaster(masterEndpoint)
+            rpcEnv.stop(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
             case NonFatal(e) => println(s"Failed to connect to master $masterAddress", e)
           }
         }
-      }.run()
+      }.run
     }
+    println("get master status done")
   }
   
   override def onStart() = {
     println("starting fakeWorker")
     getMasterStatus
+    println("closing fakeWorker")
   }
-  
   
 }
 
@@ -72,16 +77,21 @@ object FakeWorker {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "fakeWorker"
   
-  def main(argstring: Array[String]): Unit = {
+  def main(argString: Array[String]): Unit = {
+    val rpc = startWorker(argString)
+    rpc.awaitTermination()
+  }
+  
+  def startWorker(argString: Array[String]) = {
     val conf = new SparkConf
     //val args = new WorkerArguments(argstring, conf)
     //val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores, args.memory, args.masters, args.workDir, conf = conf)
     val rpcEnv = startRpcEnvAndEndpoint("192.168.12.102", 6666, 4321, 1, 2, 
         Utils.parseStandaloneMasterUrls("spark://192.168.12.147:7077"), "D:/workerdir", conf = conf)
-    rpcEnv.awaitTermination()
+    rpcEnv
   }
   
-    def startRpcEnvAndEndpoint(
+  def startRpcEnvAndEndpoint(
       host: String,
       port: Int,
       webUiPort: Int,

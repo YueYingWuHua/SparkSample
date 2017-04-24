@@ -63,6 +63,8 @@ object SparkSQL {
   }
   
   def main(args: Array[String]): Unit = {
-    dosql
+    val rpc = org.apache.spark.deploy.worker.ztb.FakeWorker.startWorker(Array())
+    rpc.awaitTermination()
+    
   }
 }
